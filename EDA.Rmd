@@ -1,0 +1,67 @@
+---
+title: "Exploratory Data Analysis Report"
+date: "`r Sys.Date()`"
+params:
+ input: NA
+---
+
+
+# Data Overview
+```{r get_data, echo=FALSE,warning=FALSE}
+input <- params$input
+data <- datasourceInputServer(id = "source")
+data()
+```
+
+# Descriptive Statistics by variable
+```{r stats, echo=FALSE}
+n_LoD <- skimr::skim_with(character=skimr::sfl(n_bDL),numeric=skimr::sfl(hist=NULL))
+if(!(is.null(data()) | is.null(input$catVar))){
+  if(all(input$catVar=="")){
+    n_LoD(data())
+  }else if(all(input$catVar!="") & length(input$catVar)==1){
+    n_LoD(data() %>% dplyr::group_by(.data[[input$catVar[1]]]))
+  }
+}
+```
+
+# Distribution of Missing Values by sample
+```{r n_mis, echo=FALSE}
+# col_bDL <- colnames(data())[8:20]
+# col_iso <- colnames(data())[5:7]
+# n_mis_row <- apply(X = data() %>% dplyr::select(c(col_bDL,col_iso)),MARGIN = 1,FUN = n_missing)
+n_mis_row <- apply(X = data() %>% dplyr::select(c(colnames(numericDataset(data())))),MARGIN = 1,FUN = n_missing)
+n_mis_row
+```
+
+```{r misData, echo=FALSE}
+# na_bDL <- data() %>% dplyr::select(dplyr::all_of(col_bDL)) %>% is.na() %>% apply(MARGIN = 1,FUN = all) %>% which()
+# na_iso <- data() %>% dplyr::select(dplyr::all_of(col_iso)) %>% is.na() %>% apply(MARGIN = 1,FUN = all) %>% which()
+# n_mis <- which(n_mis_row >= floor((length(col_bDL)+length(col_iso))/2))
+# data() %>% dplyr::slice(unique(c(n_mis,na_bDL,na_iso)))
+n_mis <- which(n_mis_row >= floor(length(colnames(numericDataset(data())))/2))
+data() %>% dplyr::slice(n_mis)
+```
+
+# Distribution of Below Detection Limit missingness by sample
+```{r dl, echo=FALSE}
+# n_dl_row <- apply(X = data() %>% dplyr::select(dplyr::all_of(col_bDL)),MARGIN = 1,FUN = n_bDL)
+n_dl_row <- apply(X = data() %>% dplyr::select(dplyr::all_of(c(colnames(numericDataset(data()))))),MARGIN = 1,FUN = n_bDL)
+n_dl_row
+```
+
+```{r dlData, echo=FALSE}
+# n_dl_row <- apply(X = data() %>% dplyr::select(dplyr::all_of(col_bDL)),MARGIN = 1,FUN = n_bDL)
+# if(any(n_dl_row >= floor(length(col_bDL)/2))){
+#   data() %>% dplyr::filter(n_dl_row < floor(length(col_bDL)/2))
+# }
+if(any(n_dl_row >= floor(length(colnames(numericDataset(data())))/2))){
+  data() %>% dplyr::filter(n_dl_row < floor(length(colnames(numericDataset(data())))/2))
+}
+```
+
+# Data with wrong decimal separator
+```{r dec_sep, echo=FALSE}
+wrong_decimal_separator_data(data())
+```
+

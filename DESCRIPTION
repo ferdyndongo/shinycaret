@@ -1,0 +1,44 @@
+Package: GranaClassifier
+Title: Grana Padano Classifier Application for the traceability research unit
+Version: 0.0.0.9000
+Authors@R: 
+    person("Ferdinand", "Ndongo", , "ferdinandbertrand.ndongo@fmach.it", role = c("aut", "cre"),
+           comment = c(ORCID = "YOUR-ORCID-ID"))
+Description: What the package does (one paragraph).
+License: MIT + file LICENSE
+Depends: 
+    R (>= 2.10)
+Imports: 
+    caret,
+    DBI,
+    dbplyr,
+    dplyr,
+    ggplot2,
+    odbc,
+    purrr,
+    readxl,
+    shiny,
+    shinydashboard,
+    Hmisc,
+    readr,
+    thematic,
+    rlang,
+    rmarkdown,
+    WriteXLS,
+    skimr,
+    rrcov,
+    DT
+Suggests: 
+    testthat (>= 3.0.0),
+    withr,
+    stringr,
+    DDoutlier,
+    factoextra,
+    GGally,
+    dbscan,
+    gridExtra
+Config/testthat/edition: 3
+Encoding: UTF-8
+LazyData: true
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.1

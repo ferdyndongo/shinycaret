@@ -1,0 +1,93 @@
+---
+title: "DBSCAN Prediction Report"
+date: "`r Sys.Date()`"
+params:
+ input: NA
+---
+
+```{r load_data, echo=FALSE}
+input <- params$input
+if(input$datasource=="database"){
+  if(!(is.null(params$input$dsn) | is.null(input$schema))){
+    dbcon <- DBI::dbConnect(drv = odbc::odbc(), input$dsn, timeout=10)
+    data <-  dplyr::tbl(src =dbcon, dbplyr::in_schema(schema=input$schema, table = input$dbtable)) %>% dplyr::collect()
+  }
+}else if(input$datasource=="csv/txt"){
+  if(!is.null(input$upload)){
+    data <- load_file(input$upload$name, input$upload$datapath)
+  }
+}else if(input$datasource=="Access/Excel"){
+  if(!is.null(input$sheet)){
+    data <- load_file(input$mdb_load$name, input$mdb_load$datapath, input$sheet)
+  }
+}
+
+if(!is.null(input$modelUpload)){
+  dbscanData <- load_file(input$modelUpload$name, input$modelUpload$datapath)
+}
+dataclust <- dbscanData$trainingSample() %>% dplyr::bind_cols(cluster=factor(dbscanData$dbscan()$cluster))
+```
+
+# TEST DATA OVERVIEW
+```{r view_data, echo=FALSE}
+data
+```
+
+# Reference DBSCAN model
+```{r model, echo=FALSE}
+dbscanData$dbscan()
+```
+
+```{r predictions, echo=FALSE}
+datapred <- dbscanPrediction(id = "source",shiny::reactive(data),shiny::reactive(dbscanData))
+```
+
+# Predicted DBSCAN outliers or clusters
+```{r clusters, echo=FALSE}
+if(any(datapred$dataclust_pred()$cluster==0)){
+  datapred$dataclust_pred() %>% dplyr::filter(cluster==0)
+}else{
+  datapred$dataclust_pred()
+}
+```
+DBSCAN clustering prediction for `r nrow(datapred$dataclust_pred())` objects.     
+
+```{r table, echo=FALSE}
+table(datapred$dataclust_pred()[["cluster"]])
+```
+
+# parallel coordinates plot
+
+```{r parplot, echo=FALSE, fig.show='hold', out.width="100%"}
+if(any(dataclust$cluster==0)){
+  parcoordPlot <- datapred$dataclust_pred() %>% 
+    dplyr::bind_rows(dataclust %>% dplyr::filter(!dataclust$cluster==0) %>% dplyr::select(dplyr::all_of(names(datapred$dataclust_pred())))) %>% parcoord_plot(varOrder=input$order)
+}else{
+  parcoordPlot <- datapred$dataclust_pred() %>%
+    dplyr::bind_rows(dataclust %>% dplyr::select(dplyr::all_of(names(datapred$dataclust_pred())))) %>% parcoord_plot(varOrder=input$order)
+}
+parcoordPlot + geom_text(mapping = aes(x = parcoordPlot$data$variable,
+                                  y = round(parcoordPlot$data$value,2),
+                                  label=parcoordPlot$data$.ID))
+```
+
+# SCORE PLOT
+```{r scorePlot, echo=FALSE, fig.show='hold', out.width="100%"}
+if(input$preprocess=="TRUE"){
+  if(length(colnames(numericDataset(dbscanData$trainingSample())))>3){
+    dbscanPlot <- factoextra::fviz_cluster(object = dbscanData$dbscan(),data = numericDataset(dbscanData$trainingSample()) %>% scale(center = TRUE,scale = TRUE), stand = FALSE, ellipse.type = input$ellipse, axes = c(as.numeric(input$dim1),as.numeric(input$dim2)))
+  }else{
+    dbscanPlot <- factoextra::fviz_cluster(object = dbscanData$dbscan(),data = numericDataset(dbscanData$trainingSample()) %>% scale(center = TRUE,scale = TRUE), stand = FALSE, ellipse.type = input$ellipse, choose.vars = c(as.numeric(input$dim1),as.numeric(input$dim2)))
+  }
+}else{
+  if(length(colnames(numericDataset(dbscanData$trainingSample())))>3){
+    dbscanPlot <- factoextra::fviz_cluster(object = dbscanData$dbscan(),data = numericDataset(dbscanData$trainingSample()), stand = FALSE, ellipse.type = input$ellipse, axes = c(as.numeric(input$dim1),as.numeric(input$dim2)))
+  }else{
+    dbscanPlot <- factoextra::fviz_cluster(object = dbscanData$dbscan(),data = numericDataset(dbscanData$trainingSample()), stand = FALSE, ellipse.type = input$ellipse, choose.vars = c(as.numeric(input$dim1),as.numeric(input$dim2)))
+  }
+}
+predViz(fviz_clust = dbscanPlot,
+        predicted_scores = datapred$predicted_scores(), 
+        comp = c(as.numeric(input$dim1),as.numeric(input$dim2)))
+```
+

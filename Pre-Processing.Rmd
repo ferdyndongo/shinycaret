@@ -1,0 +1,57 @@
+---
+title: "Data Pre-Processing Report"
+date: "`r Sys.Date()`"
+params:
+ input: NA
+---
+
+
+# Data Overview
+```{r get_data, echo=FALSE,warning=FALSE}
+input <- params$input
+data <- shiny::reactive(datasourceInputServer(id = "source")() %>% data_preprocessing())
+data()
+```
+
+# Descriptive Statistics by variable
+```{r stats, echo=FALSE}
+n_LoD <- skimr::skim_with(character=skimr::sfl(n_bDL),numeric=skimr::sfl(hist=NULL))
+if(!(is.null(data()) | is.null(input$catVar))){
+  if(all(input$catVar=="")){
+    n_LoD(data())
+  }else if(all(input$catVar!="") & length(input$catVar)==1){
+    n_LoD(data() %>% dplyr::group_by(.data[[input$catVar[1]]]))
+  }
+}
+
+```
+
+# Distribution of Missing Values by sample
+```{r n_mis, echo=FALSE}
+n_mis <- apply(X = data(),MARGIN = 1,FUN = n_missing)
+n_mis
+```
+
+```{r misData, echo=FALSE}
+if(any(n_mis >= floor(length(numericIndex(data()))/2))){
+  data() %>% dplyr::filter(n_mis >= floor(length(numericIndex(data()))/2))
+}
+
+```
+
+# Distribution of Below Detection Limit missingness by sample
+```{r dl, echo=FALSE}
+n_dl <- apply(X = data(),MARGIN = 1,FUN = n_bDL)
+n_dl
+```
+
+```{r dlData, echo=FALSE}
+if(any(n_dl >= floor(length(numericIndex(data()))/2))){
+  data() %>% dplyr::filter(n_dl >= floor(length(numericIndex(data()))/2))
+}
+```
+
+# Data with wrong decimal separator
+```{r dec_sep, echo=FALSE}
+wrong_decimal_separator_data(data())
+```

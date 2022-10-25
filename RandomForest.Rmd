@@ -1,0 +1,37 @@
+---
+title: "Random Forest Training Report"
+date: "`r Sys.Date()`"
+params:
+ input: NA
+---
+
+```{r data, echo=FALSE}
+input <- params$input
+data <- datasourceInputServer(id = "source")
+```
+
+
+# DATA OVERVIEW
+```{r rf_model, echo=FALSE}
+rf_model <- rfServer("source", data)
+```
+
+# METRICS
+```{r summary, echo=FALSE}
+browser()
+caret::print.train(rf_model())
+```
+
+# CONFUSION MATRIX
+```{r model, echo=FALSE}
+rf_model$finalModel
+```
+
+
+```{r rf_fit, echo=FALSE}
+# if(!is.null(input$catVar) & !is.null(data)){
+#   rfe <- input$rfe == "TRUE"
+#   preprocess = input$preprocess == "TRUE"
+#   rf_fit <- fit_rf(data = data,catVar = input$catVar,rfe = rfe, preprocess = preprocess)
+# }
+```

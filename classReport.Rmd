@@ -1,0 +1,65 @@
+---
+title: "Classification Model Training Report"
+date: "`r Sys.Date()`"
+params:
+ input: NA
+---
+
+```{r load_data, echo=FALSE}
+if(params$input$datasource=="database"){
+  if(!(is.null(params$input$dsn) | is.null(params$input$schema))){
+    dbcon <- DBI::dbConnect(drv = odbc::odbc(), params$input$dsn, timeout=10)
+    data <-  dplyr::tbl(src =dbcon, dbplyr::in_schema(schema=params$input$schema, table = params$input$dbtable)) %>% dplyr::collect()
+  }
+}else if(params$input$datasource=="csv/txt"){
+  if(!is.null(params$input$upload)){
+    data <- load_file(params$input$upload$name, params$input$upload$datapath)
+  }
+}else if(params$input$datasource=="Access/Excel"){
+  if(!is.null(params$input$sheet)){
+    data <- load_file(params$input$mdb_load$name, params$input$mdb_load$datapath, params$input$sheet)
+  }
+}
+```
+
+# DATA OVERVIEW
+```{r view_data, echo=FALSE}
+data %>% head()
+```
+
+```{r preprocess, echo=FALSE}
+if(!is.null(params$input$catVar) & !is.null(data)){
+  rfe <- params$input$rfe == "TRUE"
+  preprocess = params$input$preprocess == "TRUE"
+}
+```
+
+
+```{r fit_model, echo=FALSE}
+if( !(is.null(data) | is.null(params$input$catVar) | is.null(params$input$rfe) | is.null(params$input$preprocess) | is.null(params$input$caretModel)) ){
+  rfe <- input$rfe == "TRUE"
+  preprocess <- input$preprocess == "TRUE"
+  fitted_model <- base::switch(params$input$caretModel,
+                               RF=fit_rf(data = data, catVar = params$input$catVar, rfe, preprocess),
+                               KNN=fit_knn(data = data, catVar = params$input$catVar, rfe, preprocess),
+                               LDA=fit_lda(data = data,catVar = params$input$catVar, rfe, preprocess),
+                               SVM=fit_svm(data = data, catVar = params$input$catVar, rfe, preprocess),
+                               CART=fit_cart(data = data, catVar = params$input$catVar, rfe, preprocess),
+                               PLS=fit_pls(data = data, catVar = params$input$catVar, rfe, preprocess),
+                               shiny::validate("INVALID MODEL !, supported models are: RF, KNN, LADA, SVM, CART, PLS")
+  )
+}
+```
+
+# FITTED MODEL
+```{r model, echo=FALSE}
+fitted_model$finalModel
+```
+
+```{r debug, echo=FALSE}
+# browser()
+```
+# MODEL METRICS
+```{r model_metrics, echo=FALSE}
+caret::print.train(fitted_model)
+```

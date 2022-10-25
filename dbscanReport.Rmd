@@ -1,0 +1,97 @@
+---
+title: "DBSCAN Training Report"
+date: "`r Sys.Date()`"
+params:
+ input: NA
+---
+
+```{r load_data, echo=FALSE}
+if(params$input$datasource=="database"){
+  if(!(is.null(params$input$dsn) | is.null(params$input$schema))){
+    dbcon <- DBI::dbConnect(drv = odbc::odbc(), params$input$dsn, timeout=10)
+    data <-  dplyr::tbl(src =dbcon, dbplyr::in_schema(schema=params$input$schema, table = params$input$dbtable)) %>% dplyr::collect()
+  }
+}else if(params$input$datasource=="csv/txt"){
+  if(!is.null(params$input$upload)){
+    data <- load_file(params$input$upload$name, params$input$upload$datapath)
+  }
+}else if(params$input$datasource=="Access/Excel"){
+  if(!is.null(params$input$sheet)){
+    data <- load_file(params$input$mdb_load$name, params$input$mdb_load$datapath, params$input$sheet)
+  }
+}
+```
+
+# TRAINING DATA OVERVIEW
+```{r view_data, echo=FALSE}
+data
+```
+
+
+```{r fit_model, echo=FALSE}
+if( !(is.null(data) | is.null(params$input$catVar) | is.null(params$input$rfe) | is.null(params$input$preprocess)) ){
+  rfe <- input$rfe == "TRUE"
+  preprocess <- input$preprocess == "TRUE"
+  fitted_model <- fit_knn(data = data, catVar = params$input$catVar, rfe, preprocess)
+  colnames(fitted_model$trainingData)[which(colnames(fitted_model$trainingData)==".outcome")] <- params$input$catVar
+}
+```
+
+
+# DBSCAN FITTED MODEL
+```{r model, echo=FALSE}
+if (preprocess == TRUE) {
+  dbscan <- dbscan::dbscan(x = numericDataset(fitted_model$trainingData) %>% 
+                             scale(center = TRUE, scale = TRUE), eps = params$input$slider, 
+                           minPts = fitted_model[["finalModel"]]$k)
+}else {
+  dbscan <- dbscan::dbscan(x = numericDataset(fitted_model$trainingData) %>% 
+                             scale(center = FALSE, scale = FALSE), eps = params$input$slider, 
+                           minPts = fitted_model[["finalModel"]]$k)
+}
+dbscan
+```
+
+```{r table, echo=FALSE}
+table(cluster=dbscan[["cluster"]],class=fitted_model$trainingData[[params$input$catVar]])
+```
+
+# predicted outliers or clusters
+```{r predictions, echo=FALSE}
+if(any(dbscan$cluster==0)){
+  fitted_model$trainingData %>% dplyr::bind_cols(cluster=factor(dbscan$cluster)) %>% dplyr::filter(cluster==0)
+}else{
+  fitted_model$trainingData %>% dplyr::bind_cols(cluster=factor(dbscan$cluster))
+}
+
+```
+
+# parallel coordinate plot
+```{r parplot, echo=FALSE, fig.show='hold', out.width="100%"}
+fitted_model$trainingData %>% dplyr::bind_cols(cluster=factor(dbscan$cluster)) %>% 
+  parcoord_plot(varOrder=params$input$order)
+```
+
+# score plot
+```{r scoreplot, echo=FALSE, fig.show='hold', out.width="100%"}
+if(params$input$preprocess=="TRUE"){
+  if(length(colnames(numericDataset(fitted_model$trainingData)))>3){
+    factoextra::fviz_cluster(object = dbscan,data = numericDataset(fitted_model$trainingData) %>% scale(center = TRUE,scale = TRUE), stand = FALSE, ellipse.type = params$input$ellipse,
+                             axes = c(as.numeric(params$input$dim1),as.numeric(params$input$dim2)))
+  }else{
+    factoextra::fviz_cluster(object = dbscan,data = numericDataset(fitted_model$trainingData) %>% scale(center = TRUE,scale = TRUE), stand = FALSE, ellipse.type = params$input$ellipse,
+                             choose.vars = c(as.numeric(params$input$dim1),as.numeric(params$input$dim2)))
+  }
+}else{
+  if(length(colnames(numericDataset(fitted_model$trainingData)))>3){
+    factoextra::fviz_cluster(object = dbscan,data = numericDataset(fitted_model$trainingData),
+                             stand = FALSE, ellipse.type = params$input$ellipse,
+                             axes = c(as.numeric(params$input$dim1),as.numeric(params$input$dim2)))
+  }else{
+    factoextra::fviz_cluster(object = dbscan,data = numericDataset(fitted_model$trainingData),
+                             stand = FALSE, ellipse.type = params$input$ellipse,
+                             choose.vars = c(as.numeric(params$input$dim1),as.numeric(params$input$dim2)))
+  }
+}
+```
+
