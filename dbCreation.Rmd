@@ -1,0 +1,374 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r packages, echo=FALSE}
+suppressPackageStartupMessages(library(tidyverse))
+```
+
+```{r dbConnection, include=FALSE}
+library(DBI)
+db <- DBI::dbConnect(odbc::odbc(), "DQAN", timeout = 10)
+```
+
+```{sql connection="db"}
+-- Database: DQAN
+
+-- DROP DATABASE IF EXISTS "DQAN";
+
+CREATE DATABASE "DQAN"
+    WITH 
+    OWNER = postgres
+    ENCODING = 'UTF8'
+    LC_COLLATE = 'en_US.UTF-8'
+    LC_CTYPE = 'en_US.UTF-8'
+    TABLESPACE = pg_default
+    CONNECTION LIMIT = -1;
+```
+
+```{sql connection="db"}
+-- SCHEMA: GNIP
+
+DROP SCHEMA IF EXISTS GNIP;
+
+CREATE SCHEMA IF NOT EXISTS GNIP
+    AUTHORIZATION postgres;
+
+COMMENT ON SCHEMA GNIP
+    IS 'isotope data for hydrogen and oxygen from the Global Networks of Isotopes in Precipitation (GNIP)';
+```
+
+```{sql connection="db"}
+-- SCHEMA: winedb
+
+DROP SCHEMA IF EXISTS winedb ;
+
+CREATE SCHEMA IF NOT EXISTS winedb
+    AUTHORIZATION postgres;
+
+COMMENT ON SCHEMA winedb
+    IS 'schema for wine database tables';
+```
+
+```{sql connection="db"}
+-- SCHEMA: BDPO
+
+DROP SCHEMA IF EXISTS BDPO;
+
+CREATE SCHEMA IF NOT EXISTS BDPO
+    AUTHORIZATION postgres;
+
+COMMENT ON SCHEMA BDPO
+    IS 'Banca Dati Pomodoro';
+```
+
+
+```{sql connection="db"}
+-- SCHEMA: BDPO
+
+DROP SCHEMA IF EXISTS granapadano;
+
+CREATE SCHEMA IF NOT EXISTS granapadano
+    AUTHORIZATION postgres;
+
+COMMENT ON SCHEMA granapadano
+    IS 'Banca Dati Grana Padano';
+```
+
+
+
+```{sql connection="db"}
+-- SCHEMA: BDPO
+
+DROP SCHEMA IF EXISTS rawdata;
+
+CREATE SCHEMA IF NOT EXISTS rawdata
+    AUTHORIZATION postgres;
+
+COMMENT ON SCHEMA rawdata
+    IS 'Banca Dati grezzi Grana Padano';
+```
+
+```{sql connection="db"}
+-- SCHEMA: formaggi
+
+DROP SCHEMA IF EXISTS formaggi;
+
+CREATE SCHEMA IF NOT EXISTS formaggi
+    AUTHORIZATION postgres;
+
+COMMENT ON SCHEMA formaggi
+    IS 'Banca Dati Formaggi';
+```
+
+```{sql connection="db"}
+-- SCHEMA: datawarehouse
+
+ DROP SCHEMA IF EXISTS formaggi;
+
+-- CREATE SCHEMA IF NOT EXISTS datawarehouse
+--    AUTHORIZATION postgres;
+
+-- COMMENT ON SCHEMA datawarehouse
+--    IS 'raw data storage from xls file';
+```
+
+```{r}
+if (!DBI::dbExistsTable(conn = db, name = SQL("datawarehouse.granapadano"))){
+  "./Datasets/DB aggiornato al 21_03_2021_gp medie.xls" %>% preprocess() %>% 
+    DBI::dbWriteTable(conn = db, name = DBI::SQL(x = "datawarehouse.granapadano"))
+}
+# write_to_db(dsn = "DQAN", filepath = "./Datasets/DB aggiornato al 21_03_2021_gp medie.xls",schemaname = "datawarehouse",tablename = "granapadano")
+```
+
+```{sql connection="db"}
+DROP TABLE IF EXISTS dbrawdatamodel2020;
+DROP TABLE IF EXISTS dbmodel2020_2022_10_11;
+DROP TABLE IF EXISTS trainingdbcompleto2019;
+DROP TABLE IF EXISTS gnip.trainingdbcompleto2020;
+DROP TABLE IF EXISTS trainingdbcompleto2021;
+DROP TABLE IF EXISTS pred2021;
+DROP TABLE IF EXISTS rawdata.pred2020;
+DROP TABLE IF EXISTS rawdata.pred2021;
+DROP TABLE IF EXISTS datawarehouse.trainingdata;
+DROP TABLE IF EXISTS formaggi.statisticapesofresco;
+DROP TABLE IF EXISTS formaggi.statisticapesosecco;
+DROP TABLE IF EXISTS formaggi.trainingdbcompleto_2019;
+DROP TABLE IF EXISTS train.trainingset;
+DROP TABLE IF EXISTS train.trainingsolograna;
+DROP TABLE IF EXISTS train.trainingdbcompleto;
+DROP TABLE IF EXISTS test.granapadano;
+```
+
+
+```{sql connection="db"}
+-- SCHEMA: train
+DROP TABLE IF EXISTS train.granapadano;
+DROP TABLE IF EXISTS train.isotope;
+DROP SCHEMA IF EXISTS train ;
+
+CREATE SCHEMA IF NOT EXISTS train
+    AUTHORIZATION postgres;
+
+COMMENT ON SCHEMA train
+    IS 'raw data storage for outlier detection training';
+```
+
+```{sql connection="db"}
+-- SCHEMA: test
+DROP TABLE IF EXISTS test.granapadano;
+DROP TABLE IF EXISTS test.isotope;
+DROP SCHEMA IF EXISTS test ;
+
+CREATE SCHEMA IF NOT EXISTS test
+    AUTHORIZATION postgres;
+
+COMMENT ON SCHEMA test
+    IS 'raw data storage for outlier detection testing';
+```
+
+```{sql connection="db"}
+-- SCHEMA: test
+DROP TABLE IF EXISTS test.isotope;
+DROP TABLE IF EXISTS test.isotope;
+DROP SCHEMA IF EXISTS test ;
+
+CREATE SCHEMA IF NOT EXISTS test
+    AUTHORIZATION postgres;
+
+COMMENT ON SCHEMA test
+    IS 'raw data storage for outlier detection testing';
+```
+
+```{sql connection="db"}
+-- SCHEMA: models
+
+-- DROP SCHEMA IF EXISTS models ;
+
+CREATE SCHEMA IF NOT EXISTS models
+    AUTHORIZATION postgres;
+
+COMMENT ON SCHEMA datawarehouse
+    IS 'blob datatype storage for fitted models';
+```
+
+
+```{r}
+dplyr::tbl(src = db, dbplyr::in_schema(schema = "datawarehouse", table = "granapadano")) %>% dplyr::filter(anno<=2013) %>% dplyr::collect() %>% dplyr::mutate(anno=factor(anno,ordered = TRUE), Class=factor(Class), Na=Na/1000, prov=factor(stringr::str_sub(string = matricola,start = 1,end = 2))) %>% na.omit() %>% DBI::dbWriteTable(conn = db,name = DBI::SQL(x = "train.granapadano"))
+dplyr::tbl(src = db, dbplyr::in_schema(schema = "datawarehouse", table = "granapadano")) %>% dplyr::filter(anno>2013) %>% dplyr::collect() %>%  dplyr::mutate(anno=factor(anno,ordered = TRUE), Class=factor(Class), Na=Na/1000, prov=factor(stringr::str_sub(string = matricola,start = 1,end = 2))) %>% na.omit() %>% DBI::dbWriteTable(conn = db,name = DBI::SQL(x = "test.granapadano"))
+
+dplyr::tbl(src = db, dbplyr::in_schema(schema = "datawarehouse", table = "granapadano")) %>% dplyr::filter(anno<=2013) %>% dplyr::select(1,2,3,4,5,6,7) %>% dplyr::collect() %>%  dplyr::mutate(anno=factor(anno,ordered = TRUE), Class=factor(Class),prov=factor(stringr::str_sub(string = matricola,start = 1,end = 2))) %>% na.omit() %>% DBI::dbWriteTable(conn = db,name = DBI::SQL("train.isotope"))
+dplyr::tbl(src = db, dbplyr::in_schema(schema = "datawarehouse", table = "granapadano")) %>% dplyr::filter(anno>2013) %>% dplyr::select(1,2,3,4,5,6,7) %>% dplyr::collect() %>%  dplyr::mutate(anno=factor(anno,ordered = TRUE), Class=factor(Class),prov=factor(stringr::str_sub(string = matricola,start = 1,end = 2))) %>% na.omit() %>% DBI::dbWriteTable(conn = db,name = DBI::SQL("test.isotope"))
+```
+
+```{r}
+gpd <- preprocess(filepath = "../Datasets/DB aggiornato al 21_03_2021_gp medie.xls") %>% na.omit()
+odbc::dbWriteTable(conn = db, name = DBI::SQL("siat.granapadano"), value = gpd)
+rm(gpd)
+```
+
+```{r}
+isotope <- preprocess(filepath = "../Datasets/DB aggiornato al 21_03_2021_gp medie.xls") %>% select(anno, matricola, Class, d13C, d15N, d2H) %>% na.omit()
+write_to_db(dsn = "DQAN", filepath = isotope, schemaname = "siat",tablename = "isotope")
+rm(isotope)
+```
+
+```{r}
+datatrain <- dplyr::tbl(src = db, dbplyr::in_schema(schema = "siat",table = "granapadano")) %>% dplyr::filter(anno<=2013) %>% dplyr::collect() %>%  dplyr::mutate(anno=factor(anno,ordered = TRUE), Class=factor(Class),prov=factor(stringr::str_sub(string = matricola,start = 1,end = 2)))
+isotopetrain <- dplyr::tbl(src = db, dbplyr::in_schema(schema = "siat",table = "isotope")) %>% dplyr::filter(anno<=2013) %>% dplyr::collect() %>%  dplyr::mutate(anno=factor(anno,ordered = TRUE), Class=factor(Class),prov=factor(stringr::str_sub(string = matricola,start = 1,end = 2)))
+datatest <- dplyr::tbl(src = db, dbplyr::in_schema(schema = "siat",table = "granapadano")) %>% dplyr::filter(anno>2013) %>% dplyr::collect() %>%  dplyr::mutate(anno=factor(anno,ordered = TRUE), Class=factor(Class),prov=factor(stringr::str_sub(string = matricola,start = 1,end = 2)))
+isotopetest <- dplyr::tbl(src = db, dbplyr::in_schema(schema = "siat",table = "isotope")) %>% dplyr::filter(anno>2013) %>% dplyr::collect() %>%  dplyr::mutate(anno=factor(anno,ordered = TRUE), Class=factor(Class),prov=factor(stringr::str_sub(string = matricola,start = 1,end = 2)))
+```
+
+```{r}
+write_to_db(dsn = "DQAN", filepath = datatrain, schemaname = "dbscantrain",tablename = "granapadano")
+rm(datatrain)
+write_to_db(dsn = "DQAN", filepath = isotopetrain, schemaname = "dbscantrain",tablename = "isotope")
+rm(isotopetrain)
+write_to_db(dsn = "DQAN", filepath = datatest, schemaname = "dbscantest",tablename = "granapadano")
+rm(datatest)
+write_to_db(dsn = "DQAN", filepath = isotopetest, schemaname = "dbscantest",tablename = "isotope")
+rm(isotopetest)
+```
+
+```{r}
+iso <- readRDS("../../dataset/isotope/rf_2022-08-05_isotope.RDS")
+```
+
+```{r}
+b <- blob::new_blob(list(iso))
+```
+
+
+```{sql connection="db"}
+CREATE TABLE tbl_binary_1 (
+   Id SERIAL PRIMARY KEY,
+   binary_data BYTEA);
+```
+
+```{sql connection="db"}
+INSERT INTO tbl_binary_1 (binary_data)
+   VALUES
+   (E'\\055'),
+   (E'\\156');
+```
+
+```{sql connection="db"}
+CREATE TABLE models.isotope (
+   Id SERIAL PRIMARY KEY,
+   model BYTEA);
+```
+
+```{sql connection="db"}
+INSERT INTO models.isotope (model) 
+VALUES (b);
+```
+
+
+```{r}
+directory <- "data/"
+schema <- "predict"
+for(files in list.files(path = directory,pattern = "*.xlsx")){
+  filename <- stringr::str_split(string = files,pattern = ".xlsx")[[1]][1]
+    read_excel(paste(directory,files,sep=""), col_types = c("skip", "text", "text", "text", "text", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", "text")) %>% 
+    DBI::dbWriteTable(conn = db,name = DBI::SQL(x = paste(schema,filename,sep = ".")))
+}
+```
+
+
+```{sql connection="db"}
+SELECT *
+FROM siat.granapadano
+WHERE anno<=2013
+LIMIT 5;
+```
+
+
+```{r}
+
+```
+
+
+
+```{sql connection="db"}
+SELECT *
+FROM datawarehouse.granapadano
+LIMIT 5;
+```
+
+```{sql connection=db}
+DROP TABLE IF EXISTS granapadano.trainingdbcompleto2019;
+```
+
+
+
+```{r}
+library(odbc)
+library(DBI)
+mssql <- DBI::dbConnect(odbc::odbc(),
+                      Driver   = "ODBC Driver 17 for SQL Server",
+                      Server   = "localhost",
+                      Database = "master",
+                      UID      = rstudioapi::askForPassword("Database user"),
+                      PWD      = rstudioapi::askForPassword("Database password"),
+                      Port     = 1433)
+# con <- dbConnect(drv = odbc(), Driver="ODBC Driver 17 for SQL Server", dsn="master", timeout=10)
+```
+
+```{r}
+pg <- DBI::dbConnect(odbc::odbc(),
+                      Driver   = "PostgreSQL Unicode",
+                      Server   = "localhost",
+                      Database = "RecapitoCerto",
+                      User      = rstudioapi::askForPassword("Database user"),
+                      Password     = rstudioapi::askForPassword("Database password"),
+                      Port     = 5432)
+```
+
+
+```{r}
+con <- dbConnect(drv = RPostgres::Postgres(),dbname="DQAN",host="localhost",port=5432,user ="postgres",password ="FB18hcim05")
+```
+
+```{r model_as_raw, echo=FALSE}
+RPostgreSQL::postgresqlEscapeBytea(con,model_as_raw)
+# Fit and convert model -> Raw
+model <- serialize(object = rf,connection = NULL)
+d <- data.frame(type=model$modelType,method=model$method,
+           data=stringr::str_replace_all(paste(Sys.Date()),"-","_"),
+           model=I(list(model)))
+odbc::dbWriteTable(conn = db,name = "rawmodel",value = d)
+d1 <- odbc::dbGetQuery(conn = db,statement = "select * from rawmodel")
+m1 <- unserialize(d1$model[[1]])
+finalmodel_as_raw <- serialize(object = rf$finalModel,connection = NULL)
+# Convert back to model
+back_to_model <- unserialize(model_as_raw)
+back_to_finalmodel <- unserialize(finalmodel_as_raw)
+```
+
+```{r json_model, echo=FALSE}
+model_as_json <- jsonlite::serializeJSON(rf$finalModel)
+model_from_json_to_raw <- charToRaw(model_as_json)
+back_to_json <- rawToChar(model_from_json_to_raw)
+back_to_model <- jsonlite::unserializeJSON(back_to_json)
+```
+
+```{r}
+model_to_json <- jsonlite::serializeJSON(rf)
+json_dataframe <- data.frame(method=rf$method,type=rf$modelType,model_json=paste(model_to_json),data=Sys.Date())
+odbc::dbWriteTable(conn = db, name =  "models", value = json_dataframe,overwrite=FALSE,append=FALSE)
+model_json <- dbGetQuery(db, "select model_json from models;")
+json_to_model <- jsonlite::unserializeJSON(model_json$model_json)
+# a <- dbGetQuery(con, paste("SELECT ","'",model_as_json,"'","::json",sep=""))
+```
+
+
+```{r}
+model.dataframe1 <- data.frame(list(file_name=my_file_name,file_type=my_file_type,report_id=my_report_id,model=paste0("\\x",paste(my_file,collapse = ""))))
+odbc::dbWriteTable(conn = db, name =  "models.hex", value = model.dataframe1,overwrite=FALSE,append=FALSE)
+
+model.dataframe2 <- data.frame(list(file_name=my_file_name,file_type=my_file_type,report_id=my_report_id,model=paste0("\\x",paste(my_file2,collapse = ""))))
+odbc::dbWriteTable(conn = db, name =  "models.hex", value = model.dataframe2,overwrite=FALSE,append=TRUE)
+```
+
